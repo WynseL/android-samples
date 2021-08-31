@@ -1,0 +1,6 @@
+<resources>
+    <string name="label_longitude">Longitude</string>
+    <string name="label_latitude">Latitude</string>
+
+    <string name="label_location_permission_rationale">Turn on location plsss.</string>
+</resources>

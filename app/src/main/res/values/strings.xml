@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">androidsamples</string>
+
+    <!-- -->
+    <string name="title_location">Location</string>
+
+    <!-- -->
+    <string name="description_location">mmm</string>
+</resources>
