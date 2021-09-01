@@ -6,8 +6,10 @@ import android.content.Intent
 import android.content.IntentSender
 import android.os.Bundle
 import android.os.Looper
+import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.AppCompatTextView
+import com.chadgee.location.R
 import com.chadgee.location.databinding.ActivityLocationRequestBinding
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.ResolvableApiException
@@ -19,7 +21,9 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.LocationSettingsRequest
 import com.google.android.gms.location.LocationSettingsStatusCodes
 import com.google.android.gms.location.SettingsClient
+import com.google.android.material.snackbar.Snackbar
 import timber.log.Timber
+import java.lang.Exception
 
 class LocationRequestActivity: AppCompatActivity() {
 
@@ -35,7 +39,12 @@ class LocationRequestActivity: AppCompatActivity() {
     private lateinit var longitudeText: AppCompatTextView
     private lateinit var latitudeText: AppCompatTextView
 
-    private val locationService: LocationService by lazy { LocationService.Builder(this).build() }
+    private val locationService: LocationService by lazy {
+        LocationService.Builder(this)
+                .setInterval(5)
+                .setNumUpdates(1)
+                .build()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,10 +62,12 @@ class LocationRequestActivity: AppCompatActivity() {
     }
 
     private fun startLocation() {
-        locationService.getCurrentLocation {
+        locationService.getCurrentLocation({
             longitudeText.text = it.first.toString()
             latitudeText.text = it.second.toString()
-        }
+        }, {
+            Timber.e(it, DEBUGGER, "")
+        })
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -64,13 +75,25 @@ class LocationRequestActivity: AppCompatActivity() {
         if (requestCode == REQUEST_PERMISSION_CODE) {
             when (resultCode) {
                 Activity.RESULT_OK -> {
+                    showSnackbar(R.string.label_location_service_approved)
                     startLocation()
                 }
                 Activity.RESULT_CANCELED -> {
+                    showSnackbar(R.string.label_location_service_cancelled)
                     Timber.e(DEBUGGER, "User cancelled")
                 }
             }
         }
+    }
+
+    private fun showSnackbar(snackStrId: Int,
+                             actionStrId: Int = 0,
+                             listener: View.OnClickListener? = null) {
+        Snackbar.make(findViewById(android.R.id.content), getString(snackStrId), Snackbar.LENGTH_INDEFINITE).apply {
+            if (actionStrId != 0 && listener != null) {
+                setAction(getString(actionStrId), listener)
+            }
+        }.show()
     }
 
     override fun onStop() {
@@ -92,7 +115,8 @@ class LocationRequestActivity: AppCompatActivity() {
                           private val locationSettingsRequest: LocationSettingsRequest) {
         private var locationCallback: LocationCallback? = null
 
-        fun getCurrentLocation(success: (Pair<Double, Double>) -> Unit) {
+        fun getCurrentLocation(success: (Pair<Double, Double>) -> Unit,
+                               failed: (Exception?) -> Unit) {
             settingsClient.checkLocationSettings(locationSettingsRequest)
                 .addOnSuccessListener {
                     locationCallback = object: LocationCallback() {
@@ -120,6 +144,7 @@ class LocationRequestActivity: AppCompatActivity() {
                         LocationSettingsStatusCodes.SETTINGS_CHANGE_UNAVAILABLE -> {
                             Timber.e(DEBUGGER, "SETTINGS_CHANGE_UNAVAILABLE")
                         }
+                        else -> failed.invoke(exception)
                     }
                 }
         }
@@ -132,18 +157,42 @@ class LocationRequestActivity: AppCompatActivity() {
         }
 
         class Builder(private val activity: Activity) {
-            private val fusedLocationClient: FusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(activity)
-            private val settingsClient: SettingsClient = LocationServices.getSettingsClient(activity)
-            private val locationRequest: LocationRequest = LocationRequest.create().apply {
-                interval = 0L
-                fastestInterval = 0L
-                priority = LocationRequest.PRIORITY_HIGH_ACCURACY
+            companion object {
+                private const val SECOND = 1000L
             }
-            private val locationSettingsRequest: LocationSettingsRequest = LocationSettingsRequest.Builder().apply {
-                addLocationRequest(locationRequest)
-            }.build()
+
+            private lateinit var fusedLocationClient: FusedLocationProviderClient
+            private lateinit var settingsClient: SettingsClient
+            private lateinit var locationRequest: LocationRequest
+            private lateinit var locationSettingsRequest: LocationSettingsRequest
+
+            private var interval: Long = 1 * SECOND
+            private var numUpdates: Int = 3
+
+            fun setInterval(intervalInSec: Int): Builder {
+                this.interval = intervalInSec * SECOND
+                return this
+            }
+
+            fun setNumUpdates(numUpdates: Int): Builder {
+                this.numUpdates = numUpdates
+                return this
+            }
 
             fun build(): LocationService {
+                fusedLocationClient = LocationServices.getFusedLocationProviderClient(activity)
+                settingsClient = LocationServices.getSettingsClient(activity)
+                locationRequest = LocationRequest.create().apply {
+                    setExpirationDuration(this@Builder.interval * this@Builder.numUpdates * SECOND)
+                    fastestInterval = this@Builder.interval / 5
+                    interval = this@Builder.interval
+                    numUpdates = this@Builder.numUpdates
+                    priority = LocationRequest.PRIORITY_HIGH_ACCURACY
+                }
+                locationSettingsRequest = LocationSettingsRequest.Builder().apply {
+                    addLocationRequest(locationRequest)
+                }.build()
+
                 return LocationService(activity, fusedLocationClient, settingsClient,
                         locationRequest, locationSettingsRequest)
             }

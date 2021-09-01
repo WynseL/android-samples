@@ -2,5 +2,8 @@
     <string name="label_longitude">Longitude</string>
     <string name="label_latitude">Latitude</string>
 
-    <string name="label_location_permission_rationale">Turn on location plsss.</string>
+    <string name="label_location_permission_rationale">Grant location permission plsss.</string>
+
+    <string name="label_location_service_approved">Location service approved</string>
+    <string name="label_location_service_cancelled">Location service cancelled</string>
 </resources>
